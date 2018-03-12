@@ -61,8 +61,22 @@ a:hover {
  position: relative;
 }
 
-#as-pathtopo, #as-iflist, #as-astopo, #as-svrlist, #as-pathopt {
+#as-pathtopo, #as-iflist, #as-astopo, #as-svrlist, #as-pathopt, #as-pings, #as-pinglist {
  position: absolute;
+}
+
+#as-pings {
+ width: 600px;
+ height: 450px;
+ border: 1px solid #ccc;
+}
+
+#as-pinglist {
+ width: 290px;
+ height: 450px;
+ left: 600px;
+ padding-left: 10px;
+ border: 1px solid #ccc;
 }
 
 #as-pathopt {

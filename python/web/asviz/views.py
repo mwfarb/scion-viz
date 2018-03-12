@@ -17,9 +17,11 @@ import logging
 import os
 import re
 import subprocess
+import sys
 import time
 from datetime import datetime
 from django.shortcuts import render
+from django.http import HttpResponse
 
 import lib.app.sciond as lib_sciond
 from as_viewer.settings import SCION_ROOT
@@ -40,6 +42,22 @@ from lib.types import (
     ServiceType,
 )
 from lib.util import iso_timestamp
+
+# SCION
+from lib.main import main_wrapper
+from lib.packet.scmp.ext import SCMPExt
+from lib.packet.scmp.info import SCMPInfoEcho
+from lib.packet.scmp.payload import SCMPPayload
+from lib.packet.scmp.hdr import SCMPHeader
+from lib.packet.scmp.types import SCMPClass, SCMPGeneralClass
+from lib.types import L4Proto
+from integration.base_cli_srv import (
+    setup_main,
+    TestClientBase,
+    TestClientServerBase,
+    TestServerBase,
+    ResponseRV
+)
 
 # topology class definitions
 topo_servers = ['BEACON', 'CERTIFICATE', 'PATH', 'SIBRA']
@@ -657,6 +675,17 @@ def html_jsonfile(path):
     return out_str
 
 
+def get_rawfile(path):
+    '''
+    Returns raw file content.
+    :param path: Path to file.
+    '''
+    logging.info(path)
+    with open(path, 'r') as fin:
+        file = fin.read()
+    return file
+
+
 def camel_2_title(label):
     '''
     Convert key name camel case into title case.
@@ -790,7 +819,7 @@ def index(request):
                 "Certificate information for sciond not yet implemented.")
         elif (p['data'] == 'file'):
             conf_dir = "%s/%s/ISD%s/AS%s/endhost" % (
-                SCION_ROOT, GEN_PATH, s_isd_as._isd, s_isd_as._as)
+                SCION_ROOT, GEN_PATH, s_isd_as.isd_str(), s_isd_as.as_str())
             t = Topology.from_file(os.path.join(conf_dir, TOPO_FILE))
             topo = organize_topo(t)
             p['json_as_topo'] = json.dumps(get_json_as_topology(t, topo))
@@ -808,6 +837,12 @@ def index(request):
     except (SCIONBaseError) as err:
         p['err'] = "%s: %s" % (err.__class__.__name__, err)
         return fmt_err(request, p)
+
+    conf_dir = "%s/%s/ISD%s/AS%s/endhost" % (
+        SCION_ROOT, GEN_PATH, s_isd_as.isd_str(), s_isd_as.as_str())
+    p['json_topofile'] = json.dumps(
+        get_rawfile(os.path.join(conf_dir, TOPO_FILE)))
+
     return render(request, 'asviz/index.html', p)
 
 
@@ -823,4 +858,43 @@ def fmt_err(request, params):
     params['json_seg_topo'] = '{}'
     params['json_as_topo'] = '{"links": [], "nodes": []}'
     params['path_info'] = ''
+    params['json_topofile'] = 'null'
     return render(request, 'asviz/index.html', params)
+
+
+def print_http_response(f):
+
+    class WritableObject:
+        def __init__(self):
+            self.content = []
+
+        def write(self, string):
+            self.content.append(string)
+
+    def new_f(*args, **kwargs):
+        printed = WritableObject()
+        sys.stdout = printed
+        f(*args, **kwargs)
+        sys.stdout = sys.__stdout__
+        return HttpResponse(['<BR>' if c == '\n' else c for c in printed.content])
+
+    return new_f
+
+
+from django.views.decorators.csrf import csrf_exempt
+
+
+@csrf_exempt
+@print_http_response
+def get_pings(request):
+
+    src_ia = request.POST.get('src')
+    src_addr = request.POST.get('addr')
+    dst_ia = request.POST.get('dst_ping')
+    dst_addr = request.POST.get('dst_addr_ping')
+
+    cmd = 'cd %s && python3 sub/scion-viz/python/web/asviz/ping.py -c %s,%s -s %s,%s \
+    --count 5 --interval 0.25' % (
+        SCION_ROOT, src_ia, src_addr, dst_ia, dst_addr)
+    logging.info("Running: %s" % cmd)
+    print(os.popen(cmd).read())
