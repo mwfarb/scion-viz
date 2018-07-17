@@ -131,7 +131,7 @@
         </div>
        </div>
 
-       <div id='tabLocation'>
+       <div id='tabLocation' class="tab-pane fade in">
         <webview id="g-map" src="{% static "html/map.html" %}"
          partition="google-maps"></webview>
        </div>
@@ -196,13 +196,7 @@
             console.log('selected tab: ' + activeTab);
         });
 
-        // show g-map, remove d-map
-        //      if (d_map) {
-        $("#d-map").remove();
-        $("#tabLocation").append(
-            "<webview id='g-map' src='{% static 'html/map.html' %}' partition='google-maps'></webview>");
-        //       }
-        //       d_map = null;
+        // load location map
         self.isds = [];
         initGMap(self.isds);
     });
