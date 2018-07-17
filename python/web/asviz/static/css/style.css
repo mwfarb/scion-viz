@@ -252,6 +252,13 @@ ul.tree li.open > a:not(:last-child):before {
 
 }
 
+/* G-MAP LOCATIONS */
+#g-map {
+ position: absolute;
+ width: calc(100% - ( 2px));
+ height: calc(100% - ( 58px));
+}
+
 /**
  * ------------------------------- Tabs --------------------------------
  */

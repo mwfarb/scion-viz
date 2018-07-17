@@ -25,6 +25,7 @@
 <link rel="stylesheet" href="{% static "css/bootstrap.min.css" %}"></link>
 <link rel="stylesheet" href="{% static "css/style.css" %}"></link>
 <link rel="stylesheet" href="{% static "css/topology.css" %}"></link>
+<link href="{% static "html/map.html" %}"></link>
 {% endblock css %}
 <!-- Scripts -->
 {% block js %}
@@ -35,6 +36,8 @@
 <script src="{% static "js/topojson.min.js" %}"></script>
 <script src="{% static "js/topology.js" %}" ></script>
 <script src="{% static "js/tab-topocola.js" %}" ></script>
+<script src="{% static "js/location.js" %}" ></script>
+<script src="{% static "js/tab-g-maps.js" %}" ></script>
 <script src="{% static "js/asviz.js" %}" ></script>
 {% endblock %}
 </head>
@@ -86,6 +89,8 @@
      <ul class="nav nav-tabs">
       <li><a data-toggle="tab" href="#as-tab-pathtopo"
        id="tab-pathtopo">Paths</a></li>
+      <li><a data-toggle="tab" href='#tabLocation'
+       id="tab-location">Location</a></li>
       <li><a data-toggle="tab" href="#as-tab-astopo"
        id="tab-astopo">AS Topology</a></li>
       <li><a data-toggle="tab" href="#as-tab-trc" id="tab-trc">ISD
@@ -125,6 +130,12 @@
           onclick="$('#tab').val('tab-pathtopo');" />
         </div>
        </div>
+
+       <div id='tabLocation'>
+        <webview id="g-map" src="{% static "html/map.html" %}"
+         partition="google-maps"></webview>
+       </div>
+
        <div id="as-pathtopo"></div>
        <div id="as-iflist">
         <h2>Selected Path Interfaces</h2>
@@ -184,6 +195,16 @@
             $("#tab").val(activeTab);
             console.log('selected tab: ' + activeTab);
         });
+
+        // show g-map, remove d-map
+        //      if (d_map) {
+        $("#d-map").remove();
+        $("#tabLocation").append(
+            "<webview id='g-map' src='{% static 'html/map.html' %}' partition='google-maps'></webview>");
+        //       }
+        //       d_map = null;
+        self.isds = [];
+        initGMap(self.isds);
     });
 
     function loadData(err) {
