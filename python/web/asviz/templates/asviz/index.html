@@ -89,7 +89,7 @@
      <ul class="nav nav-tabs">
       <li><a data-toggle="tab" href="#as-tab-pathtopo"
        id="tab-pathtopo">Paths</a></li>
-      <li><a data-toggle="tab" href='#tabLocation'
+      <li><a data-toggle="tab" href='#as-tab-location'
        id="tab-location">Location</a></li>
       <li><a data-toggle="tab" href="#as-tab-astopo"
        id="tab-astopo">AS Topology</a></li>
@@ -130,12 +130,6 @@
           onclick="$('#tab').val('tab-pathtopo');" />
         </div>
        </div>
-
-       <div id='tabLocation' class="tab-pane fade in">
-        <webview id="g-map" src="{% static "html/map.html" %}"
-         partition="google-maps"></webview>
-       </div>
-
        <div id="as-pathtopo"></div>
        <div id="as-iflist">
         <h2>Selected Path Interfaces</h2>
@@ -143,6 +137,9 @@
         <p>{{ path_info | safe }}</p>
         {% endif %}
        </div>
+      </div>
+      <div id='as-tab-location' class="tab-pane fade in">
+       <div id="g-map"></div>
       </div>
       <div id="as-tab-trc" class="tab-pane fade in">
        <div id="as-trc">
@@ -195,11 +192,17 @@
             $("#tab").val(activeTab);
             console.log('selected tab: ' + activeTab);
         });
-
-        // load location map
-        self.isds = [];
-        initGMap(self.isds);
     });
+
+    function initMap() {
+        map = new google.maps.Map(document.getElementById('g-map'), {
+            center : {
+                lat : -34.397,
+                lng : 150.644
+            },
+            zoom : 8
+        });
+    }
 
     function loadData(err) {
         if (err && err != '') {
@@ -236,5 +239,8 @@
         document.getElementById("as-selection").innerHTML = "Click on a server";
     }
 </script>
+<script
+ src="https://maps.googleapis.com/maps/api/js?key=AIzaSyC1amANd6P0ptnLs9I0WRTY5NPR3KrL0ao&callback=initMap"
+ async defer></script>
 <noscript>This form requires that you have javascript enabled
  to work properly please enable javascript in your browser.</noscript>

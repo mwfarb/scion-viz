@@ -61,7 +61,7 @@ a:hover {
  position: relative;
 }
 
-#as-pathtopo, #as-iflist, #as-astopo, #as-svrlist, #as-pathopt {
+#as-pathtopo, #as-location, #as-iflist, #as-astopo, #as-svrlist, #as-pathopt {
  position: absolute;
 }
 
@@ -101,6 +101,15 @@ a:hover {
  left: 600px;
  padding-left: 10px;
  border: 1px solid #ccc;
+}
+
+#as-location {
+ width: 900px;
+ height: 450px;
+ padding-left: 10px;
+ border: 1px solid #ccc;
+ overflow: scroll;
+ overflow-x: hidden;
 }
 
 #as-trclist {
