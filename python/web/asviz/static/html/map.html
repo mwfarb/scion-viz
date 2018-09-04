@@ -17,7 +17,7 @@
 <html>
 <head>
 <title>SCION Locations Google Map Context</title>
-<meta name="viewport" content="initial-scale=1.0, user-scalable=no">
+<meta name="viewport">
 <meta charset="utf-8">
 <style>
 /**
@@ -36,10 +36,10 @@ html, body {
 
 #legend {
  font-family: Arial, sans-serif;
- background: #fff;
- padding: 10px;
- margin: 10px;
- border: 3px solid #000;
+ background: #fffc;
+ padding: 5px;
+ margin: 5px;
+ border: 1px solid #999;
 }
 
 #legend h3 {
@@ -52,26 +52,32 @@ html, body {
 </style>
 <script>
     var g_map;
-    var route;
-    var routeAll;
+    var route = [];
+    var routeAll = [];
     var world_geometry;
-    var geodesic = true;
     var strokeOpacity = 1;
     var strokeWeight = 2;
     var isds;
     var proj;
     var appWindow = null;
     var appOrigin = null;
-    var isd_colors = [ 'grey', 'blue', 'orange', 'green', 'red', 'purple',
-            'brown' ];
+    var markers = [];
+    var msgCacheIntervalMs = 1000;
+
+    var isd10Colors = [ 'blue', 'orange', 'green', 'red', 'purple', 'brown',
+            'pink', 'gray', 'yellow', 'teal', ];
 
     /**
      * Load the Google Maps API using our Google Cloud Storage developer key.
      **/
     function loadScript() {
         var script = document.createElement('script');
+        MAPS_API_KEY = 'AIzaSyC1amANd6P0ptnLs9I0WRTY5NPR3KrL0ao';
         script.type = 'text/javascript';
-        script.src = "https://maps.googleapis.com/maps/api/js?key=AIzaSyC1amANd6P0ptnLs9I0WRTY5NPR3KrL0ao&callback=initMap";
+        script.src = "https://maps.googleapis.com/maps/api/js?key="
+                + MAPS_API_KEY + "&libraries=geometry&callback=initMap";
+        script.setAttribute("defer", "defer");
+        script.setAttribute("async", "async");
         document.body.appendChild(script);
     }
 
@@ -81,7 +87,28 @@ html, body {
     function initMap() {
         g_map = new google.maps.Map(document.getElementById('map-canvas'), {
             mapTypeId : 'roadmap',
+            fullscreenControl : true,
+            zoomControl : true,
+            scaleControl : false,
+            mapTypeControl : false,
+            streetViewControl : false,
+            rotateControl : false,
         });
+    }
+
+    function getIsdColor(isd) {
+        order = isds.map(function(e) {
+            return e.ia;
+        }).indexOf(parseInt(isd));
+        return isd10Colors[order % 10];
+    }
+
+    function compareNumbers(a, b) {
+        if (a.ia < b.ia)
+            return -1;
+        if (a.ia > b.ia)
+            return 1;
+        return 0;
     }
 
     /**
@@ -90,26 +117,27 @@ html, body {
     function setLegend() {
         var icons = {};
         for (var i = 0, len = isds.length; i < len; i++) {
-            icons['isd' + isds[i]] = {
-                name : 'ISD-' + isds[i],
-                color : isd_colors[isds[i]]
+            var label = isds[i].label ? ' ' + isds[i].label : '';
+            icons['isd' + isds[i].ia] = {
+                name : 'ISD-' + isds[i].ia + label,
+                color : getIsdColor(isds[i].ia),
             };
         }
         var legend = document.getElementById('legend');
-        for ( var key in icons) {
+        for (key in icons) {
             var type = icons[key];
             var name = type.name;
             var color = type.color;
             var div = document.createElement('div');
 
-            div.innerHTML = '<svg width="20" height="10">\
-                    <rect x="0" y="0" width="20" height="10"\
+            div.innerHTML = '<svg width="10" height="10">\
+                    <rect x="0" y="0" width="10" height="10"\
                     style="fill:' + color + ';stroke:black;stroke-width:1;fill-opacity:0.5;" />\
                 </svg>'
                     + ' ' + name;
             legend.appendChild(div);
         }
-        g_map.controls[google.maps.ControlPosition.RIGHT_BOTTOM].push(document
+        g_map.controls[google.maps.ControlPosition.LEFT_TOP].push(document
                 .getElementById('legend'));
     }
 
@@ -148,15 +176,18 @@ html, body {
     /**
      * Formats the AS location marker objects.
      **/
-    function setGMMarker(name, latitude, longitude, label, map) {
+    function setGMMarker(ia, name, latitude, longitude, hint, label, map, isd) {
         var marker = new google.maps.Marker({
-            icon : getIcon(parseInt(name[0]), label),
+            icon : getIcon(isd, hint),
             position : {
                 lat : parseFloat(latitude),
                 lng : parseFloat(longitude)
             },
-            title : name,
-            map : map
+            title : ia + ' ' + name,
+            map : map,
+            label : label,
+            // ensure src/dst are in front of dense groupings
+            zIndex : (hint.length > 0 ? 1 : 0),
         });
         return marker;
     }
@@ -169,8 +200,8 @@ html, body {
                 '<?xml version="1.0"?>',
                 '<svg width="25px" height="25px" viewBox="-25 -50 50 50" xmlns="http://www.w3.org/2000/svg" version="1.1">',
                 '<path d="M0-48c-9.8 0-17.7 7.8-17.7 17.4 0 15.5 17.7 30.6 17.7 30.6s17.7-15.4 17.7-30.6c0-9.6-7.9-17.4-17.7-17.4z" fill="'
-                        + isd_colors[isd]
-                        + '" stroke="black" stroke-width="1" fill-opacity=".25" />',
+                        + getIsdColor(isd)
+                        + '" stroke="black" stroke-width="1" fill-opacity=".50" />',
                 '<text x="-10" y="-15" font-family="sans-serif" font-size="30px" fill="white">'
                         + label + '</text>', '</svg>' ].join('\n');
         return {
@@ -180,54 +211,161 @@ html, body {
         };
     }
 
+    function labelAsMarkers(prop) {
+        for (key in markers) {
+            var asLabel = '';
+            if (prop.useNumber) {
+                asLabel += markers[key].ia;
+            }
+            if (prop.useName) {
+                if (asLabel.length > 0) {
+                    asLabel += ' ';
+                }
+                asLabel += markers[key].name;
+            }
+            if (asLabel.length > 0) {
+                markers[key].marker.setLabel({
+                    text : asLabel,
+                    fontSize : "12px",
+                    fontWeight : "bold",
+                    color : "#444",
+                });
+            } else {
+                markers[key].marker.setLabel(null);
+            }
+        }
+    }
+
     /**
      * Draw AS markers on the map, and zoom to AS bounds.
      **/
     function setAsMarkers(loc) {
+
+        // sort by location, then name
+        loc.sort(function(a, b) {
+            if (a.longitude === b.longitude) {
+                return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
+            }
+            return (a.longitude) - (b.longitude);
+        })
+        // combine ISD locations that share geo-location
+        for (i = 0; i < loc.length; ++i) {
+            if ((i + 1) < loc.length
+                    && loc[i].longitude === loc[i + 1].longitude
+                    && loc[i].latitude === loc[i + 1].latitude) {
+                // remove and add to previous
+                loc[i + 1].ia = loc[i].ia + ', ' + loc[i + 1].ia;
+                loc[i + 1].name = loc[i].name + ', ' + loc[i + 1].name;
+                if (loc[i].radius > loc[i + 1].radius) {
+                    loc[i + 1].radius = loc[i].radius;
+                }
+                loc.splice(i--, 1);
+            }
+        }
+
         // display AS locations
-        var markers = [];
         for (var i = 0; i < loc.length; i++) {
-            var label = loc[i].marker;
-            markers.push(setGMMarker(loc[i].name, loc[i].latitude,
-                    loc[i].longitude, label, g_map));
+            var hint = loc[i].marker;
+            var isd = loc[i].ia.split("-")[0];
+            // store labels for later lookup
+            markers.push({
+                ia : loc[i].ia,
+                name : loc[i].name,
+                marker : setGMMarker(loc[i].ia, loc[i].name, loc[i].latitude,
+                        loc[i].longitude, hint, null, g_map, isd)
+            });
         }
 
         // zoom to AS bounds
         var bounds = new google.maps.LatLngBounds();
-        for (var i = 0; i < markers.length; i++) {
-            bounds.extend(markers[i].getPosition());
+        for (key in markers) {
+            bounds.extend(markers[key].marker.getPosition());
         }
         g_map.fitBounds(bounds);
+        g_map.panToBounds(bounds);
+    }
+
+    function isPathWrapped(alat, alng, blat, blng, heading) {
+        if ((alng < 0) && (blng > 0) && (heading < 0)) {
+            // crossed -180 longitude heading west
+            return true;
+        } else if ((alng > 0) && (blng < 0) && (heading > 0)) {
+            // crossed 180 longitude heading east
+            return true;
+        } else if ((alat > 0) && (blat < 0)
+                && ((heading < 90) || (heading > -90))) {
+            // crossed 90 latitude heading north
+            return true;
+        } else if ((alat < 0) && (blat > 0)
+                && ((heading > 90) || (heading < -90))) {
+            // crossed -90 latitude heading south
+            return true;
+        }
+        return false;
+    }
+
+    function mapPath(origin, destination) {
+        var path = [];
+        var crossed = false;
+        alat = parseFloat(origin.latitude);
+        alng = parseFloat(origin.longitude);
+        blat = parseFloat(destination.latitude);
+        blng = parseFloat(destination.longitude);
+        a = new google.maps.LatLng(alat, alng);
+        b = new google.maps.LatLng(blat, blng);
+
+        // uncomment next 2 lines to reroute meridian crossing
+        // heading = google.maps.geometry.spherical.computeHeading(a, b);
+        // crossed = isPathWrapped(alat, alng, blat, blng, heading);
+
+        if (crossed) {
+            // routing with forced midpoint to reverse heading
+            mlat = (a.lat() + b.lat()) / 2;
+            mlng = (a.lng() + b.lng()) / 2;
+            m = new google.maps.LatLng(mlat, mlng);
+            path.push([ a, m ]);
+            path.push([ m, b ]);
+        } else {
+            // natural shortest path routing
+            path.push([ a, b ]);
+        }
+        return path;
     }
 
     /**
      * Formats the current path selection to draw proper polylines on the map.
      **/
     function setPathSelected(path) {
-        if (route) {
-            route.setMap(null);
-            route = null;
-        }
-        if (path.length > 0) {
-            var arcs = [];
-            for (var i = 0; i < path.length; i++) {
-                arcs.push({
-                    lat : parseFloat(path[i].origin.latitude),
-                    lng : parseFloat(path[i].origin.longitude)
-                });
+        if (route.length > 0) {
+            for (var i = 0; i < route.length; i++) {
+                route[i].setMap(null);
             }
-            arcs.push({
-                lat : parseFloat(path[i - 1].destination.latitude),
-                lng : parseFloat(path[i - 1].destination.longitude)
-            });
-            route = new google.maps.Polyline({
+            route = [];
+        }
+        if (path.length == 0) {
+            return;
+        }
+        for (var i = 0; i < path.length; i++) {
+            var arcs = [];
+            var links = mapPath(path[i].origin, path[i].destination);
+            for (var p = 0; p < links.length; p++) {
+                arcs.push(links[p][0]);
+            }
+            arcs.push(links[links.length - 1][1]); // last link
+            route.push(new google.maps.Polyline({
+                map : g_map,
                 path : arcs,
-                geodesic : geodesic,
-                strokeColor : path[0].options.strokeColor,
+                geodesic : links.length == 1,
                 strokeOpacity : strokeOpacity,
                 strokeWeight : strokeWeight,
-            });
-            route.setMap(g_map);
+                options : path[i].options,
+                icons : [ {
+                    icon : {
+                        path : google.maps.SymbolPath.FORWARD_CLOSED_ARROW
+                    },
+                    offset : '50%'
+                } ]
+            }));
         }
     }
 
@@ -235,29 +373,30 @@ html, body {
      * Formats the entire topology to draw proper polylines on the map.
      **/
     function setPathAll(path) {
-        if (routeAll) {
-            routeAll.setMap(null);
-            routeAll = null;
+        if (routeAll.length > 0) {
+            for (var i = 0; i < routeAll.length; i++) {
+                routeAll[i].setMap(null);
+            }
+            routeAll = [];
         }
-        var pathAll = [];
+        if (path.length == 0) {
+            return;
+        }
         for (var i = 0; i < path.length; i++) {
-            pathAll.push([ {
-                lat : parseFloat(path[i].origin.latitude),
-                lng : parseFloat(path[i].origin.longitude)
-            }, {
-                lat : parseFloat(path[i].destination.latitude),
-                lng : parseFloat(path[i].destination.longitude)
-            } ]);
+            var pathAll = [];
+            var links = mapPath(path[i].origin, path[i].destination);
+            for (var p = 0; p < links.length; p++) {
+                pathAll.push(links[p]);
+            }
+            routeAll.push(new google.maps.Polygon({
+                map : g_map,
+                paths : pathAll,
+                geodesic : links.length == 1,
+                strokeOpacity : strokeOpacity,
+                strokeWeight : strokeWeight,
+                options : path[i].options,
+            }));
         }
-
-        routeAll = new google.maps.Polygon({
-            paths : pathAll,
-            geodesic : geodesic,
-            strokeColor : path[0].options.strokeColor,
-            strokeOpacity : strokeOpacity,
-            strokeWeight : strokeWeight,
-        });
-        routeAll.setMap(g_map);
     }
 
     /**
@@ -271,28 +410,45 @@ html, body {
             console.log('Opened communication with SCION Viz app.');
         }
         console.log('Received message:', JSON.stringify(event.data));
+        if (g_map) {
+            processMessage(event);
+        } else {
+            cacheMessage(event);
+        }
+    }
 
+    /**
+     * Before map apis are loaded, cache messages and reprocess when map loads.
+     **/
+    function cacheMessage(event) {
+        console.warn("map message waiting", msgCacheIntervalMs, "ms");
+        setTimeout(function() {
+            if (g_map) {
+                processMessage(event);
+            } else {
+                cacheMessage(event);
+            }
+        }, msgCacheIntervalMs);
+    }
+
+    /**
+     * When map apis are loaded, here we add the requested map details.
+     **/
+    function processMessage(event) {
         if (event.data.command.hasOwnProperty('initMap')) {
-            if (g_map) {
-                isds = event.data.command.initMap;
-                setLegend();
-            }
+            isds = event.data.command.initMap;
+            isds.sort(compareNumbers);
+            setLegend();
         } else if (event.data.command.hasOwnProperty('updateMapAsMarkers')) {
-            if (g_map) {
-                setAsMarkers(event.data.command.updateMapAsMarkers);
-            }
+            setAsMarkers(event.data.command.updateMapAsMarkers);
         } else if (event.data.command.hasOwnProperty('updateMapAsLinksAll')) {
-            if (g_map) {
-                setPathAll(event.data.command.updateMapAsLinksAll);
-            }
+            setPathAll(event.data.command.updateMapAsLinksAll);
         } else if (event.data.command.hasOwnProperty('updateMapAsLinksPath')) {
-            if (g_map) {
-                setPathSelected(event.data.command.updateMapAsLinksPath);
-            }
+            setPathSelected(event.data.command.updateMapAsLinksPath);
         } else if (event.data.command.hasOwnProperty('updateMapIsdRegions')) {
-            if (g_map) {
-                setIsdRegion(event.data.command.updateMapIsdRegions);
-            }
+            setIsdRegion(event.data.command.updateMapIsdRegions);
+        } else if (event.data.command.hasOwnProperty('updateMapAsLabels')) {
+            labelAsMarkers(event.data.command.updateMapAsLabels);
         }
     }
 
@@ -307,8 +463,6 @@ html, body {
 </head>
 <body>
  <div id="map-canvas"></div>
- <div id="legend">
-  <h3>Legend</h3>
- </div>
+ <div id="legend"></div>
 </body>
 </html>

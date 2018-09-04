@@ -1,12 +1,12 @@
 /*
  * Copyright 2016 ETH Zurich
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
  * the License at
- * 
+ *
  * http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
  * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
@@ -17,24 +17,24 @@
 var wv_map = null;
 
 /**
- * Asynchronously notifies the Google Maps webview that the Google Maps API is
+ * Asynchronously notifies the Google Maps iframe that the Google Maps API is
  * ready to be loaded and rendered for the first time.
- * 
+ *
  * @param isds
  *            A numeric array of ISD numbers used to render the map legend.
  */
 function initGMap(isds) {
     wv_map = document.getElementById('g-map');
-    console.log('got webview:', wv_map);
+    console.log('got iframe:', wv_map);
 
     wv_map.addEventListener("loadstart", function() {
-        console.debug("webview loading...");
+        console.debug("iframe loading...");
     });
     wv_map.addEventListener("contentload", function() {
-        console.debug("webview content load done");
+        console.debug("iframe content load done");
     });
     wv_map.addEventListener("loadstop", function() {
-        console.debug("webview loading stopped");
+        console.debug("iframe loading stopped");
     });
 
     if (wv_map) {
@@ -48,25 +48,17 @@ function initGMap(isds) {
 
 /**
  * Constructs a list of all possible and currently selected path topology
- * locations and asynchronously passes it to the Google Maps webview for updated
+ * locations and asynchronously passes it to the Google Maps iframe for updated
  * rendering of polylines.
- * 
+ *
  * @param path
  *            When undefined, no currently selected path will be displayed.
  */
-function updateGMapAsLinks(res, path) {
+function updateGMapAsLinks(res, path, color) {
     if (wv_map) {
-        var all = getTopologyLinksAll();
-        // update all paths
-        wv_map.contentWindow.postMessage({
-            command : {
-                updateMapAsLinksAll : all
-            }
-        }, "*");
-
         var routes = [];
         if (typeof path !== "undefined") {
-            routes = getPathSelectedLinks(res, path);
+            routes = getPathSelectedLinks(res, path, color);
         }
         // update selected path
         wv_map.contentWindow.postMessage({
@@ -77,14 +69,25 @@ function updateGMapAsLinks(res, path) {
     }
 }
 
+function updateGMapAsLinksAll() {
+    if (wv_map) {
+        var all = getTopologyLinksAll();
+        // update all paths
+        wv_map.contentWindow.postMessage({
+            command : {
+                updateMapAsLinksAll : all
+            }
+        }, "*");
+    }
+}
+
 /**
  * Constructs a list of the location, co-location, and source/destination
  * properties of all AS markers and asynchronously passes it to the Google Maps
- * webview for updated rendering of symbolic markers.
+ * iframe for updated rendering of symbolic markers.
  */
 function updateGMapAsMarkers(src, dst) {
     var loc = getMarkerLocations(src, dst);
-
     if (wv_map) {
         wv_map.contentWindow.postMessage({
             command : {
@@ -96,7 +99,7 @@ function updateGMapAsMarkers(src, dst) {
 
 /**
  * Constructs a list of all countries currently in the ISD Whitelist and
- * asynchronously passes it to the Google Maps webview for updated rendering of
+ * asynchronously passes it to the Google Maps iframe for updated rendering of
  * fusion table polygons.
  */
 function updateGMapIsdRegions(isds) {
@@ -117,6 +120,20 @@ function updateGMapIsdRegions(isds) {
         wv_map.contentWindow.postMessage({
             command : {
                 updateMapIsdRegions : countries
+            }
+        }, "*");
+    }
+}
+
+function updateGMapAsLabels(useName, useNumber) {
+    var prop = {
+        useName : useName,
+        useNumber : useNumber
+    };
+    if (wv_map) {
+        wv_map.contentWindow.postMessage({
+            command : {
+                updateMapAsLabels : prop
             }
         }, "*");
     }

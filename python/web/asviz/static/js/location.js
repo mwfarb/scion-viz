@@ -59,12 +59,9 @@ function getAllGeocoordinates() {
     var loc = [];
     var isdAs;
     for (isdAs in self.jLoc) {
-        var ifNum = isdAs.split('-');
-        if (self.jLoc.hasOwnProperty(isdAs)) {
-            var coord = [ latlong[self.jLoc[isdAs]][0],
-                    latlong[self.jLoc[isdAs]][1] ];
-            loc.push(coord);
-        }
+        var isdAs = self.jLoc[key];
+        var coord = [ isdAs.lat, isdAs.lng ];
+        loc.push(coord);
     }
     console.log('all coordinates', loc);
     return loc;
@@ -114,9 +111,15 @@ function getTopologyLinksAll() {
     var arcs = [];
     for (var p = 0; p < self.jTopo.length; p++) {
         // we want all ISD-ASes from each A to B link possible
-        var isdAsA = self.jLoc[self.jTopo[p].a];
-        var isdAsB = self.jLoc[self.jTopo[p].b];
-        if (isdAsA == isdAsB) {
+        aLocs = $.grep(self.jLoc, function(e, i) {
+            return e.ia === self.jTopo[p].a;
+        });
+        bLocs = $.grep(self.jLoc, function(e, i) {
+            return e.ia === self.jTopo[p].b;
+        });
+        var isdAsA = [ aLocs[0].lat, aLocs[0].lng ];
+        var isdAsB = [ bLocs[0].lat, bLocs[0].lng ];
+        if (JSON.stringify(isdAsA) == JSON.stringify(isdAsB)) {
             // skip internal routing when making arcs
             continue;
         }
@@ -128,7 +131,7 @@ function getTopologyLinksAll() {
 /**
  * Find only the currently selected path, returns map coordinates..
  */
-function getPathSelectedLinks(res, path) {
+function getPathSelectedLinks(res, path, color) {
     var arcs = [];
     var routes = [];
     if (path < 0) {
@@ -140,17 +143,23 @@ function getPathSelectedLinks(res, path) {
     }
     for (var p = 0; p < routes.length; p++) {
         var pNum = parseInt(routes[p]);
-        for (var ifNum = 0; ifNum < (res.if_lists[pNum].length - 1); ifNum++) {
+        for (var ifNum = 0; ifNum < (res.if_lists[pNum].interfaces.length - 1); ifNum++) {
             // we want all ISD-ASes from each interface path traversed
-            var iface = res.if_lists[pNum][ifNum];
-            var ifaceNext = res.if_lists[pNum][ifNum + 1];
-            var isdAsA = self.jLoc[iface.ISD + '-' + iface.AS];
-            var isdAsB = self.jLoc[ifaceNext.ISD + '-' + ifaceNext.AS];
-            if (isdAsA == isdAsB) {
+            var iface = res.if_lists[pNum].interfaces[ifNum];
+            var ifaceNext = res.if_lists[pNum].interfaces[ifNum + 1];
+            aLocs = $.grep(self.jLoc, function(e, i) {
+                return e.ia === (iface.ISD + '-' + iface.AS);
+            });
+            bLocs = $.grep(self.jLoc, function(e, i) {
+                return e.ia === (ifaceNext.ISD + '-' + ifaceNext.AS);
+            });
+            var isdAsA = [ aLocs[0].lat, aLocs[0].lng ];
+            var isdAsB = [ bLocs[0].lat, bLocs[0].lng ];
+            if (JSON.stringify(isdAsA) == JSON.stringify(isdAsB)) {
                 // skip internal routing when making arcs
                 continue;
             }
-            arcs.push(createLink(isdAsA, isdAsB, C_MAP_PATH_ACTIVE));
+            arcs.push(createLink(isdAsA, isdAsB, color));
         }
     }
     return arcs;
@@ -158,24 +167,24 @@ function getPathSelectedLinks(res, path) {
 
 /**
  * Formats path link data used for both Datamaps and Webcola map UI.
- * 
+ *
  * @param isdAsA
- *                Link start "ISD-AS".
+ *            Link start "ISD-AS".
  * @param isdAsB
- *                Link end "ISD-AS".
+ *            Link end "ISD-AS".
  * @param color
- *                RGB color of link path.
+ *            RGB color of link path.
  * @returns Link object used to draw.
  */
 function createLink(isdAsA, isdAsB, color) {
     return {
         origin : {
-            latitude : latlong[isdAsA][0],
-            longitude : latlong[isdAsA][1]
+            latitude : isdAsA[0],
+            longitude : isdAsA[1]
         },
         destination : {
-            latitude : latlong[isdAsB][0],
-            longitude : latlong[isdAsB][1]
+            latitude : isdAsB[0],
+            longitude : isdAsB[1]
         },
         options : {
             strokeColor : color
@@ -188,50 +197,27 @@ function createLink(isdAsA, isdAsB, color) {
  */
 function getMarkerLocations(src, dst) {
     var loc = [];
-    var isdAs;
-    for (isdAs in self.jLoc) {
-        var ifNum = isdAs.split('-');
-        if (self.jLoc.hasOwnProperty(isdAs)) {
-            label = '', marker = '', rad = 4;
-            if (src != null && isdAs == src) {
-                label = " (source)";
-                marker = 'S';
-                rad = 8;
-            } else if (dst != null && isdAs == dst) {
-                label = " (destination)";
-                marker = 'D';
-                rad = 8;
-            }
-            var bubble = {
-                name : isdAs + label,
-                marker : marker,
-                latitude : latlong[self.jLoc[isdAs]][0],
-                longitude : latlong[self.jLoc[isdAs]][1],
-                radius : rad,
-                fillKey : "ISD-" + ifNum[0],
-            };
-            loc.push(bubble);
+    for (key in self.jLoc) {
+        var isdAs = self.jLoc[key];
+        var ifNum = isdAs.ia.split('-');
+        marker = '', rad = 4;
+        if (src != null && isdAs.ia == src) {
+            marker = 'S';
+            rad = 8;
+        } else if (dst != null && isdAs.ia == dst) {
+            marker = 'D';
+            rad = 8;
         }
-    }
-    // combine ISD locations that share geo-location
-    // sort by location, then name
-    loc.sort(function(a, b) {
-        if (a.longitude === b.longitude) {
-            return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
-        }
-        return (a.longitude) - (b.longitude);
-    })
-    for (i = 0; i < loc.length; ++i) {
-        if ((i + 1) < loc.length && loc[i].longitude === loc[i + 1].longitude
-                && loc[i].latitude === loc[i + 1].latitude) {
-            // remove and add to previous
-            loc[i + 1].name = loc[i].name + ', ' + loc[i + 1].name;
-            loc[i + 1].marker = loc[i].marker + loc[i + 1].marker;
-            if (loc[i].radius > loc[i + 1].radius) {
-                loc[i + 1].radius = loc[i].radius;
-            }
-            loc.splice(i--, 1);
-        }
+        var bubble = {
+            ia : isdAs.ia,
+            name : isdAs.host,
+            marker : marker,
+            latitude : isdAs.lat,
+            longitude : isdAs.lng,
+            radius : rad,
+            fillKey : "ISD-" + ifNum[0],
+        };
+        loc.push(bubble);
     }
     return loc;
 }
